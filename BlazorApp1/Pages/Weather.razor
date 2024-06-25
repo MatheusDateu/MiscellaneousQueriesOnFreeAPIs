@@ -1,0 +1,201 @@
+﻿@page "/youtube"
+@inject HttpClient Http
+
+<PageTitle>Pesquise no Youtube</PageTitle>
+
+<h1>Pesquisa no Youtube</h1>
+
+<p>This component demonstrates fetching data from the YouTube API.</p>
+<div class="input-group mb-3 w-50">
+    <select @bind="SearchType" class="form-select">
+        <option value="AutoComplete">AutoComplete</option>
+        <option value="Video">Video</option>
+    </select>
+    <input type="search" class="form-control" @bind="ToSearch" placeholder="Enter search query"/>
+    <button class="btn btn-primary" @onclick="PerformSearch">Search</button>
+</div>
+@if (IsLoading)
+{
+    <p>
+        <i class="spinner-border"></i><em class="text-black-50">Carregando...</em>
+    </p>
+}
+else if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div class="alert alert-danger">@ErrorMessage</div>
+}
+else if (_autoCompleteResults != null && SearchType == "AutoComplete")
+{
+    <h6 class="placeholder-glow">Query: @_autoCompleteResults.Query <span class="small text-primary">(@_autoCompleteResults.Results.Count results)</span></h6>
+    <ul class="list-group list-group">
+        @foreach (var result in _autoCompleteResults.Results)
+        {
+            <li class="list-group-item">@result</li>
+        }
+    </ul>
+}
+else if (_videoSearchResults != null && SearchType == "Video")
+{
+    <div class="row row-cols-1 row-cols-md-3 g-4">
+        @foreach (var content in _videoSearchResults.Contents)
+        {
+            <div class="col">
+                <div class="card h-100">
+                    @if (content.Video.Thumbnails != null && content.Video.Thumbnails.Any())
+                    {
+                        <img src="@content.Video.Thumbnails[0].Url" class="card-img-top" alt="Video Thumbnail">
+                    }
+                    <div class="card-body">
+                        <h5 class="card-title">@content.Video.Title</h5>
+                        <p class="card-text">@content.Video.DescriptionSnippet</p>
+                        <p class="card-text">
+                            <small class="text-muted">@content.Video.PublishedTimeText | Views: @content.Video.Stats?.Views</small>
+                        </p>
+                        <a href="https://www.youtube.com/watch?v=@content.Video.VideoId" class="btn btn-primary" target="_blank">Watch Video</a>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private string SearchType { get; set; } = "AutoComplete";
+    private AutoCompleteTips? _autoCompleteResults;
+    private VideoSearchResult? _videoSearchResults;
+    public string ToSearch { get; set; } = string.Empty;
+    private bool IsLoading { get; set; } = false;
+    private string? ErrorMessage { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Console.Out.WriteLineAsync("Inicializou o componente corretamente");
+    }
+
+    #region PerformSearch
+
+    private async Task PerformSearch()
+    {
+        IsLoading = true;
+        ErrorMessage = null;
+        try
+        {
+            switch (SearchType)
+            {
+                case "AutoComplete":
+                    await GetAutoCompleteTips();
+                    break;
+                case "Video":
+                    await GetVideos();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "An error occurred while fetching data: " + ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    #endregion
+
+    #region AutoComplete
+
+    private async Task GetAutoCompleteTips()
+    {
+        var request = new HttpRequestMessage
+        {
+            Method = HttpMethod.Get,
+            RequestUri = new Uri($"https://youtube-data8.p.rapidapi.com/auto-complete/?q={ToSearch}"),
+            Headers =
+            {
+                { "x-rapidapi-key", "680f296eefmshd58e7d9010aa1e8p1018bejsndaffaefa33f0" },
+                { "x-rapidapi-host", "youtube-data8.p.rapidapi.com" },
+            },
+        };
+
+        using var response = await Http.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync();
+
+        _autoCompleteResults = System.Text.Json.JsonSerializer.Deserialize<AutoCompleteTips>(body, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+    }
+
+    #endregion
+
+    #region VideoSearch
+
+    private async Task GetVideos()
+    {
+        var request = new HttpRequestMessage
+        {
+            Method = HttpMethod.Get,
+            RequestUri = new Uri($"https://youtube-data8.p.rapidapi.com/search/?q={ToSearch}"),
+            Headers =
+            {
+                { "x-rapidapi-key", "680f296eefmshd58e7d9010aa1e8p1018bejsndaffaefa33f0" },
+                { "x-rapidapi-host", "youtube-data8.p.rapidapi.com" },
+            },
+        };
+
+        using var response = await Http.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync();
+        
+        _videoSearchResults = System.Text.Json.JsonSerializer.Deserialize<VideoSearchResult>(body, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+    }
+
+    #endregion
+
+    #region Models
+
+    public class VideoSearchResult
+    {
+        public List<Content> Contents { get; set; }
+    }
+
+    public class Content
+    {
+        public Video Video { get; set; }
+    }
+
+    public class Video
+    {
+        public string Title { get; set; }
+        public string VideoId { get; set; }
+        public Author Author { get; set; }
+        public string DescriptionSnippet { get; set; }
+        public List<Thumbnail> Thumbnails { get; set; }
+        public Stats? Stats { get; set; }
+        public string PublishedTimeText { get; set; }
+    }
+
+    public class Author
+    {
+        public string Title { get; set; }
+        public string ChannelId { get; set; }
+    }
+
+    public class Thumbnail
+    {
+        public string Url { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+    }
+
+    public class Stats
+    {
+        public int? Views { get; set; }
+    }
+
+    public class AutoCompleteTips
+    {
+        public string Query { get; set; }
+        public List<string> Results { get; set; }
+    }
+
+    #endregion
+}
